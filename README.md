@@ -1,165 +1,164 @@
-# Express Server Template
+# reddit-scraper-express-server
 
-A production-ready Express API server template with TypeScript, perfect for quickly spinning up new backend services.
+Express API that proxies Reddit thread scrapes to **[Apify Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite)** (`trudax/reddit-scraper-lite`). Keeps your `APIFY_API_TOKEN` server-side so the Next.js app and other clients never talk to Apify directly.
 
-## Features
+## Why Apify Reddit Scraper Lite?
 
-- ✅ **TypeScript** - Full type safety and modern JS features
-- ✅ **Express.js** - Fast, minimalist web framework
-- ✅ **CORS** - Configured for cross-origin requests
-- ✅ **Hot Reload** - Nodemon for development
-- ✅ **Health Checks** - Built-in health endpoints
-- ✅ **Error Handling** - Centralized error middleware
-- ✅ **Clean Structure** - Organized, scalable file structure
+We use [trudax/reddit-scraper-lite](https://apify.com/trudax/reddit-scraper-lite) instead of Reddit's official API for thread comment fetches:
 
-## Quick Start
+- **No Reddit OAuth** — scrape public posts and comments without app credentials or rate-limit headaches on the client.
+- **Pay per result** — ~$3.40 / 1,000 stored results; the Apify free tier ($5/mo credits) covers light usage.
+- **Thread + comments in one run** — pass a post URL via `startUrls` and get the post plus nested comments in a single dataset.
+- **Residential proxies built in** — the Lite actor uses Apify proxy configuration tuned for Reddit.
 
-### 1. Create a New Project from This Template
+See the [actor README on Apify](https://apify.com/trudax/reddit-scraper-lite) for full input/output schema, pricing, and example dataset items.
 
-**Using GitHub CLI:**
-```bash
-gh repo create my-new-api --template trouthouse-tech/express-server-template --private --clone
-cd my-new-api
+## Flow in the content-research stack
+
+```
+content-researcher (Next.js)
+  → POST /api/reddit-search/threads/:id/get-reddit-thread-data
+content-researcher-express-server
+  → loads thread permalink from Supabase
+  → POST { url } to reddit-scraper-express-server
+reddit-scraper-express-server  ← this repo
+  → Apify run-sync-get-dataset-items (trudax~reddit-scraper-lite)
+  → returns dataset items (post + comments)
+content-researcher-express-server
+  → maps comments, persists to reddit_thread_comment, returns to UI
 ```
 
-**Using degit:**
-```bash
-npx degit trouthouse-tech/express-server-template my-new-api
-cd my-new-api
-git init
-```
+**content-researcher-express-server** points at this service via `REDDIT_SCRAPER_EXPRESS_URL` (default `http://localhost:3037`).
 
-### 2. Install Dependencies
+## Quick start
+
+### 1. Install
+
 ```bash
 npm install
 ```
 
-### 3. Run Development Server
+### 2. Environment
+
+Create `.env` from `.env.example`:
+
+```env
+PORT=3037
+NODE_ENV=development
+APIFY_API_TOKEN=your_apify_token_here
+```
+
+`APIFY_API_TOKEN` is required. Create one in the [Apify console → Integrations](https://console.apify.com/account/integrations).
+
+### 3. Run
+
 ```bash
 npm run dev
 ```
 
-Server will start on `http://localhost:3000`
+Server listens on `http://localhost:3037`.
 
-### 4. Test It
+### 4. Smoke test
+
 ```bash
-curl http://localhost:3000
-# {"status":"ok","message":"TroutHouseTech Express Server is running",...}
+curl -X POST http://localhost:3037/api/services/get-reddit-thread-data \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://www.reddit.com/r/AI_Agents/comments/1tyyojl/need_help_orchestrating_a_video_editing_agent/"}'
 ```
 
-## Available Endpoints
+Sync Apify runs can take **40s+** (`scrollTimeout` is 40 in actor input). Apify allows up to ~300s for sync runs.
 
-- `GET /` - Health check
-- `GET /api/health` - Health check with detailed info
+## API
 
-## Project Structure
+### `POST /api/services/get-reddit-thread-data`
 
-```
-express-server-template/
-├── index.ts                 # Main entry point
-├── src/
-│   └── services/
-│       ├── middleware/      # Express middleware
-│       │   ├── setup-early-middleware.ts
-│       │   ├── setup-error-handling.ts
-│       │   └── index.ts
-│       ├── health/          # Health check routes
-│       │   ├── create-health-router.ts
-│       │   └── index.ts
-│       └── server/          # Server startup logic
-│           ├── start-server.ts
-│           └── index.ts
-├── package.json
-├── tsconfig.json
-└── .gitignore
+Runs [Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite) synchronously via Apify's `run-sync-get-dataset-items` endpoint and returns the dataset.
+
+**Body (JSON)**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | string | Yes | Reddit thread URL (any `reddit.com` subdomain) |
+
+**Success (200)**
+
+```json
+{ "success": true, "data": [ /* Apify dataset items */ ] }
 ```
 
-## Environment Variables
+Each item is a post, comment, user, or community object with a `dataType` field. For thread fetches you typically get one `post` item and many `comment` items. See [Apify output examples](https://apify.com/trudax/reddit-scraper-lite#results).
 
-Create a `.env` file in the root directory:
+**Client error (400)** — `{ "success": false, "error": "..." }` (missing or non-Reddit URL)
 
-```env
-PORT=3000
-NODE_ENV=development
+**Server error (500)** — missing `APIFY_API_TOKEN`, Apify failure, or unexpected response shape
+
+### Health
+
+- `GET /` — basic health check
+- `GET /api/health` — detailed health check
+
+## Apify actor configuration
+
+This service calls:
+
+```
+POST https://api.apify.com/v2/actors/trudax~reddit-scraper-lite/run-sync-get-dataset-items?token=...
+```
+
+Actor input is built in `src/services/get-reddit-thread-data/config.ts`. The client `url` is passed as a single `startUrls` entry. Current defaults:
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `startUrls` | `[{ url }]` | Thread permalink from caller |
+| `skipComments` | `false` | Extract comments for the post |
+| `maxComments` | `10` | Per-post comment cap in actor input |
+| `scrollTimeout` | `40` | Seconds to scroll/load comments |
+| `includeMediaLinks` | `false` | Faster RSS-style post extraction |
+| `proxy.useApifyProxy` | `true` | Apify residential proxy |
+| `proxy.apifyProxyGroups` | `["RESIDENTIAL"]` | |
+
+To change limits (e.g. more comments per thread), edit `buildApifyRedditScraperInput` in `config.ts`.
+
+## Project structure
+
+```
+reddit-scraper-express-server/
+├── index.ts
+├── src/services/
+│   ├── get-reddit-thread-data/   # Apify proxy (handler, process, config)
+│   ├── health/
+│   ├── middleware/
+│   └── server/
+├── .env.example
+└── package.json
 ```
 
 ## Scripts
 
-- `npm run dev` - Start development server with hot reload
-- `npm start` - Start production server
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm run build:watch` - Watch mode compilation
-
-## Adding New Routes
-
-Feature routes and business logic live under `src/services/{feature}/`. When you add a database, put CRUD in `src/data/{table}/` (one file per operation) and call those functions from `processX()` in the service folder.
-
-1. Create a new router in `src/services/{feature}/`:
-
-```typescript
-// src/services/my-feature/create-my-router.ts
-import { Router, Request, Response } from 'express';
-
-export const createMyRouter = (): Router => {
-  const router = Router();
-  
-  router.get('/', (req: Request, res: Response) => {
-    res.json({ message: 'My feature works!' });
-  });
-  
-  return router;
-};
-```
-
-2. Export it in `src/services/my-feature/index.ts`:
-
-```typescript
-export { createMyRouter } from './create-my-router';
-```
-
-3. Mount it in `index.ts`:
-
-```typescript
-import { createMyRouter } from './src/services/my-feature';
-app.use('/api/my-feature', createMyRouter());
-```
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Dev server with hot reload (port 3037) |
+| `npm start` | Run with ts-node |
+| `npm run build` | Compile TypeScript to `dist/` |
 
 ## Deployment
 
-### Build for Production
 ```bash
 npm run build
-```
-
-### Run Production Build
-```bash
 NODE_ENV=production node dist/index.js
 ```
 
+Set `APIFY_API_TOKEN` in the host environment (Railway, etc.). Point **content-researcher-express-server** at the deployed URL with `REDDIT_SCRAPER_EXPRESS_URL`.
+
 ## Architecture & agent rules
 
-Cursor agents and contributors should follow **`.cursor/rules/AGENTS.md`** and the ADRs in **`.cursor/architecture/`**.
+Cursor agents should follow **`.cursor/rules/AGENTS.md`** and ADRs in **`.cursor/architecture/`**.
 
-| Layer | Path | Purpose |
-|-------|------|---------|
-| CRUD | `src/data/{table}/` | One folder per table, one function per file — **no business logic** |
-| HTTP + actions | `src/services/{feature}/` | Routers, handlers, `processX()` business logic |
-| Cross-cutting | `src/services/middleware`, `health`, `server` | Shipped in starter |
-
-There is **no `src/domains/`** folder in this template.
-
-## Architecture Principles
-
-- **One function per file** — including each CRUD operation in its own file under `src/data/{table}/`
-- **Factory pattern** — `createXRouter(): Router` in `src/services/{feature}/`
-- **Index exports** — every folder has an `index.ts`
-- **CRUD vs services** — database calls only in `src/data/`; orchestration in `src/services/`
-- **Type safety** — use `type`, not `interface`
+- HTTP + business logic: `src/services/{feature}/` (routers, handlers, `processX()`)
+- Cross-cutting: `src/services/middleware`, `health`, `server`
+- Factory pattern: `createXRouter(): Router`
+- Use `type`, not `interface`
 
 ## License
 
 MIT
-
-## Author
-
-TroutHouseTech
