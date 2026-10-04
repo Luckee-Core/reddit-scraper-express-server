@@ -46,9 +46,12 @@ Create `.env` from `.env.example`:
 PORT=3037
 NODE_ENV=development
 APIFY_API_TOKEN=your_apify_token_here
+SCRAPER_API_KEY=shared_server_key
 ```
 
 `APIFY_API_TOKEN` is required. Create one in the [Apify console → Integrations](https://console.apify.com/account/integrations).
+
+`SCRAPER_API_KEY` is required. Callers (CMS, other Express servers) must send it as `x-scraper-api-key`. This endpoint is server-to-server; do not put the key in a browser bundle.
 
 ### 3. Run
 
@@ -63,6 +66,7 @@ Server listens on `http://localhost:3037`.
 ```bash
 curl -X POST http://localhost:3037/api/services/get-reddit-thread-data \
   -H "Content-Type: application/json" \
+  -H "x-scraper-api-key: shared_server_key" \
   -d '{"url":"https://www.reddit.com/r/AI_Agents/comments/1tyyojl/need_help_orchestrating_a_video_editing_agent/"}'
 ```
 
@@ -80,6 +84,12 @@ Runs [Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite) synchro
 |-------|------|----------|-------------|
 | `url` | string | Yes | Reddit thread URL (any `reddit.com` subdomain) |
 
+**Headers**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `x-scraper-api-key` | Yes | Must match `SCRAPER_API_KEY`. Server-to-server only. |
+
 **Success (200)**
 
 ```json
@@ -88,9 +98,11 @@ Runs [Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite) synchro
 
 Each item is a post, comment, user, or community object with a `dataType` field. For thread fetches you typically get one `post` item and many `comment` items. See [Apify output examples](https://apify.com/trudax/reddit-scraper-lite#results).
 
+**Unauthorized (401)** — missing or invalid `x-scraper-api-key`
+
 **Client error (400)** — `{ "success": false, "error": "..." }` (missing or non-Reddit URL)
 
-**Server error (500)** — missing `APIFY_API_TOKEN`, Apify failure, or unexpected response shape
+**Server error (500)** — missing `SCRAPER_API_KEY` / `APIFY_API_TOKEN`, Apify failure, or unexpected response shape
 
 ### Health
 
@@ -148,7 +160,7 @@ npm run build
 NODE_ENV=production node dist/index.js
 ```
 
-Set `APIFY_API_TOKEN` in the host environment (Railway, etc.). Point **content-researcher-express-server** at the deployed URL with `REDDIT_SCRAPER_EXPRESS_URL`.
+Set `APIFY_API_TOKEN` and `SCRAPER_API_KEY` in the host environment (Railway, etc.). Point callers at the deployed URL with `REDDIT_SCRAPER_EXPRESS_URL` and the same `SCRAPER_API_KEY`.
 
 ## Architecture & agent rules
 

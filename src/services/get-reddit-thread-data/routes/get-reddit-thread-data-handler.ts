@@ -7,6 +7,7 @@ const isRedditUrl = (url: string): boolean => /reddit\.com/i.test(url);
 
 /**
  * POST /api/services/get-reddit-thread-data
+ * Server-to-server only. Requires x-scraper-api-key.
  * Body: { url: string }
  */
 export const getRedditThreadDataHandler = async (
@@ -14,6 +15,20 @@ export const getRedditThreadDataHandler = async (
   res: Response
 ): Promise<void> => {
   console.log(`📥 ${LOG} POST /`);
+
+  const expectedKey = process.env.SCRAPER_API_KEY?.trim();
+  if (!expectedKey) {
+    console.error(`❌ ${LOG} SCRAPER_API_KEY is not configured`);
+    res.status(500).json({ success: false, error: 'Service unavailable' });
+    return;
+  }
+
+  const providedKey = req.header('x-scraper-api-key')?.trim() ?? '';
+  if (providedKey !== expectedKey) {
+    console.error(`❌ ${LOG} unauthorized`);
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return;
+  }
 
   const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
 
