@@ -70,6 +70,15 @@ curl -X POST http://localhost:3037/api/services/get-reddit-thread-data \
   -d '{"url":"https://www.reddit.com/r/AI_Agents/comments/1tyyojl/need_help_orchestrating_a_video_editing_agent/"}'
 ```
 
+Community listing (10 posts, no comments):
+
+```bash
+curl -X POST http://localhost:3037/api/services/get-reddit-thread-data \
+  -H "Content-Type: application/json" \
+  -H "x-scraper-api-key: shared_server_key" \
+  -d '{"url":"https://www.reddit.com/r/news/new","mode":"listing"}'
+```
+
 Sync Apify runs can take **40s+** (`scrollTimeout` is 40 in actor input). Apify allows up to ~300s for sync runs.
 
 ## API
@@ -82,7 +91,8 @@ Runs [Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite) synchro
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `url` | string | Yes | Reddit thread URL (any `reddit.com` subdomain) |
+| `url` | string | Yes | Reddit thread or community listing URL (any `reddit.com` subdomain) |
+| `mode` | string | No | `thread` (default) or `listing`. Listing skips comments and community metadata. |
 
 **Headers**
 

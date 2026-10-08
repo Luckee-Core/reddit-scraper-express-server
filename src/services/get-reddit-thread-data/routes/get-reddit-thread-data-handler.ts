@@ -1,14 +1,25 @@
 import { Request, Response } from 'express';
 import { processGetRedditThreadData } from '../process-get-reddit-thread-data';
+import type { RedditScraperMode } from '../types';
 
 const LOG = '[get-reddit-thread-data]';
 
 const isRedditUrl = (url: string): boolean => /reddit\.com/i.test(url);
 
+const parseMode = (value: unknown): RedditScraperMode | null => {
+  if (value === undefined || value === 'thread') {
+    return 'thread';
+  }
+  if (value === 'listing') {
+    return 'listing';
+  }
+  return null;
+};
+
 /**
  * POST /api/services/get-reddit-thread-data
  * Server-to-server only. Requires x-scraper-api-key.
- * Body: { url: string }
+ * Body: { url: string, mode?: 'thread' | 'listing' }
  */
 export const getRedditThreadDataHandler = async (
   req: Request,
@@ -44,8 +55,15 @@ export const getRedditThreadDataHandler = async (
     return;
   }
 
+  const mode = parseMode(req.body?.mode);
+  if (!mode) {
+    console.error(`❌ ${LOG} invalid mode`);
+    res.status(400).json({ success: false, error: 'mode must be thread or listing' });
+    return;
+  }
+
   try {
-    const result = await processGetRedditThreadData({ url });
+    const result = await processGetRedditThreadData({ url, mode });
 
     if ('rawError' in result) {
       console.error(`❌ ${LOG} ${result.rawError}`);

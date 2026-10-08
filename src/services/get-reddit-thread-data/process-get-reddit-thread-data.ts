@@ -20,10 +20,13 @@ export const processGetRedditThreadData = async (
     return { rawError: 'Empty url' };
   }
 
+  const mode = input.mode === 'listing' ? 'listing' : 'thread';
   const apifyUrl = getApifyRunSyncUrl(token);
-  const body = buildApifyRedditScraperInput(url);
+  const body = buildApifyRedditScraperInput(url, mode);
 
-  console.log(`🚀 ${LOG} POST Apify run-sync-get-dataset-items url=${JSON.stringify(url)}`);
+  console.log(
+    `🚀 ${LOG} POST Apify run-sync-get-dataset-items url=${JSON.stringify(url)} mode=${mode}`
+  );
 
   const startedAt = Date.now();
   let response: Response;

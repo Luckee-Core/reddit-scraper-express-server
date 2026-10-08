@@ -1,5 +1,8 @@
+export type RedditScraperMode = 'thread' | 'listing';
+
 export type GetRedditThreadDataRequest = {
   url: string;
+  mode?: RedditScraperMode;
 };
 
 export type ApifyRedditScraperLiteInput = {
@@ -33,6 +36,7 @@ export type ApifyDatasetItem = Record<string, unknown>;
 
 export type ProcessGetRedditThreadDataInput = {
   url: string;
+  mode?: RedditScraperMode;
 };
 
 export type ProcessGetRedditThreadDataResult =
