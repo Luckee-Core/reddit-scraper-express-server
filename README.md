@@ -1,167 +1,125 @@
-# reddit-scraper-express-server
+# Reddit Scraper Express Server
 
-Express API that proxies Reddit thread scrapes to **[Apify Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite)** (`trudax/reddit-scraper-lite`). Keeps your `APIFY_API_TOKEN` server-side so the Next.js app and other clients never talk to Apify directly.
+Open-source Express API that proxies public Reddit thread and listing URLs to **[Apify Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite)** (`trudax/reddit-scraper-lite`). Keeps `APIFY_API_TOKEN` and your `SCRAPER_API_KEY` on the server so callers never talk to Apify directly.
 
-## Why Apify Reddit Scraper Lite?
+**Not for browser clients** — integrate from your backend with `x-scraper-api-key`.
 
-We use [trudax/reddit-scraper-lite](https://apify.com/trudax/reddit-scraper-lite) instead of Reddit's official API for thread comment fetches:
-
-- **No Reddit OAuth** — scrape public posts and comments without app credentials or rate-limit headaches on the client.
-- **Pay per result** — ~$3.40 / 1,000 stored results; the Apify free tier ($5/mo credits) covers light usage.
-- **Thread + comments in one run** — pass a post URL via `startUrls` and get the post plus nested comments in a single dataset.
-- **Residential proxies built in** — the Lite actor uses Apify proxy configuration tuned for Reddit.
-
-See the [actor README on Apify](https://apify.com/trudax/reddit-scraper-lite) for full input/output schema, pricing, and example dataset items.
-
-## Flow in the content-research stack
-
-```
-content-researcher (Next.js)
-  → POST /api/reddit-search/threads/:id/get-reddit-thread-data
-content-researcher-express-server
-  → loads thread permalink from Supabase
-  → POST { url } to reddit-scraper-express-server
-reddit-scraper-express-server  ← this repo
-  → Apify run-sync-get-dataset-items (trudax~reddit-scraper-lite)
-  → returns dataset items (post + comments)
-content-researcher-express-server
-  → maps comments, persists to reddit_thread_comment, returns to UI
-```
-
-**content-researcher-express-server** points at this service via `REDDIT_SCRAPER_EXPRESS_URL` (default `http://localhost:3037`).
-
-## Quick start
-
-### 1. Install
+## TL;DR
 
 ```bash
+git clone https://github.com/Luckee-Core/reddit-scraper-express-server.git
+cd reddit-scraper-express-server
 npm install
-```
-
-### 2. Environment
-
-Create `.env` from `.env.example`:
-
-```env
-PORT=3037
-NODE_ENV=development
-APIFY_API_TOKEN=your_apify_token_here
-SCRAPER_API_KEY=shared_server_key
-```
-
-`APIFY_API_TOKEN` is required. Create one in the [Apify console → Integrations](https://console.apify.com/account/integrations).
-
-`SCRAPER_API_KEY` is required. Callers (CMS, other Express servers) must send it as `x-scraper-api-key`. This endpoint is server-to-server; do not put the key in a browser bundle.
-
-### 3. Run
-
-```bash
+cp .env.example .env
+# Set APIFY_API_TOKEN and SCRAPER_API_KEY
 npm run dev
 ```
 
-Server listens on `http://localhost:3037`.
-
-### 4. Smoke test
+Open [http://localhost:3037/docs](http://localhost:3037/docs) for the API reference.
 
 ```bash
+curl -s http://localhost:3037/api/health | jq .
+
 curl -X POST http://localhost:3037/api/services/get-reddit-thread-data \
   -H "Content-Type: application/json" \
-  -H "x-scraper-api-key: shared_server_key" \
-  -d '{"url":"https://www.reddit.com/r/AI_Agents/comments/1tyyojl/need_help_orchestrating_a_video_editing_agent/"}'
-```
-
-Community listing (10 posts, no comments):
-
-```bash
-curl -X POST http://localhost:3037/api/services/get-reddit-thread-data \
-  -H "Content-Type: application/json" \
-  -H "x-scraper-api-key: shared_server_key" \
+  -H "x-scraper-api-key: YOUR_SCRAPER_API_KEY" \
   -d '{"url":"https://www.reddit.com/r/news/new","mode":"listing"}'
 ```
 
-Sync Apify runs can take **40s+** (`scrollTimeout` is 40 in actor input). Apify allows up to ~300s for sync runs.
+Sync Apify runs can take **40s+** (up to ~300s). Plan proxy timeouts accordingly.
+
+## Features
+
+- **Thread scrape** — post + comments (actor defaults: up to 10 comments, 40s scroll)
+- **Listing scrape** — up to 10 posts, no comments (`mode: "listing"`)
+- **API key auth** on scrape route (`x-scraper-api-key`)
+- **Health** with `{ success, data }` JSON envelope
+- **API docs** — `GET /api-docs.json` and `GET /docs` (HTML)
+- **MIT** — self-host on Railway, Docker, or your VPC
+
+## Why Apify Reddit Scraper Lite?
+
+- **No Reddit OAuth** for read-only public scrape flows
+- **Pay per result** — see [Apify pricing](https://apify.com/trudax/reddit-scraper-lite#pricing)
+- **Residential proxies** built into the actor
 
 ## API
 
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/` | No | Health check |
+| `GET` | `/api/health` | No | Health check |
+| `POST` | `/api/services/get-reddit-thread-data` | `x-scraper-api-key` | Apify sync scrape |
+| `GET` | `/api-docs.json` | No | API catalog (JSON) |
+| `GET` | `/docs` | No | API reference (HTML) |
+
 ### `POST /api/services/get-reddit-thread-data`
 
-Runs [Reddit Scraper Lite](https://apify.com/trudax/reddit-scraper-lite) synchronously via Apify's `run-sync-get-dataset-items` endpoint and returns the dataset.
+**Headers:** `x-scraper-api-key` (required), `Content-Type: application/json`
 
-**Body (JSON)**
+**Body**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `url` | string | Yes | Reddit thread or community listing URL (any `reddit.com` subdomain) |
-| `mode` | string | No | `thread` (default) or `listing`. Listing skips comments and community metadata. |
+| `url` | string | Yes | Any `reddit.com` thread or listing URL |
+| `mode` | string | No | `thread` (default) or `listing` |
 
-**Headers**
+**Success (200):** `{ "success": true, "data": [ /* Apify dataset items */ ] }`
 
-| Header | Required | Description |
-|--------|----------|-------------|
-| `x-scraper-api-key` | Yes | Must match `SCRAPER_API_KEY`. Server-to-server only. |
+**Errors:** `400` validation, `401` unauthorized, `500` misconfiguration or Apify failure
 
-**Success (200)**
+## Environment
 
-```json
-{ "success": true, "data": [ /* Apify dataset items */ ] }
-```
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No (default `3037`) | HTTP listen port |
+| `NODE_ENV` | No | `development` or `production` |
+| `APIFY_API_TOKEN` | Yes (scrape) | [Apify console → Integrations](https://console.apify.com/account/integrations) |
+| `SCRAPER_API_KEY` | Yes (scrape) | Shared secret for `x-scraper-api-key` — server-only |
+| `PUBLIC_API_URL` | No | Base URL in API docs catalog |
 
-Each item is a post, comment, user, or community object with a `dataType` field. For thread fetches you typically get one `post` item and many `comment` items. See [Apify output examples](https://apify.com/trudax/reddit-scraper-lite#results).
+Copy `.env.example` to `.env`. Never commit secrets.
 
-**Unauthorized (401)** — missing or invalid `x-scraper-api-key`
+## Threat model and trust boundaries
 
-**Client error (400)** — `{ "success": false, "error": "..." }` (missing or non-Reddit URL)
+**Intended use:** localhost or a private network where only **trusted backends** hold `SCRAPER_API_KEY`.
 
-**Server error (500)** — missing `SCRAPER_API_KEY` / `APIFY_API_TOKEN`, Apify failure, or unexpected response shape
+- **Apify billing:** each scrape spends Apify credits; a leaked API key on an open port enables cost abuse.
+- **CORS:** permissive `cors()` defaults — fine for local dev; tighten before public deploy ([`docs/production-hardening.md`](docs/production-hardening.md)).
+- **No database** — stateless proxy.
+- **Compliance:** you are responsible for lawful use of scraped public Reddit data.
 
-### Health
-
-- `GET /` — basic health check
-- `GET /api/health` — detailed health check
+Before LAN or internet exposure, see [`docs/production-hardening.md`](docs/production-hardening.md) and [`SECURITY.md`](SECURITY.md).
 
 ## Apify actor configuration
 
-This service calls:
-
-```
-POST https://api.apify.com/v2/actors/trudax~reddit-scraper-lite/run-sync-get-dataset-items?token=...
-```
-
-Actor input is built in `src/services/get-reddit-thread-data/config.ts`. The client `url` is passed as a single `startUrls` entry. Current defaults:
-
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| `startUrls` | `[{ url }]` | Thread permalink from caller |
-| `skipComments` | `false` | Extract comments for the post |
-| `maxComments` | `10` | Per-post comment cap in actor input |
-| `scrollTimeout` | `40` | Seconds to scroll/load comments |
-| `includeMediaLinks` | `false` | Faster RSS-style post extraction |
-| `proxy.useApifyProxy` | `true` | Apify residential proxy |
-| `proxy.apifyProxyGroups` | `["RESIDENTIAL"]` | |
-
-To change limits (e.g. more comments per thread), edit `buildApifyRedditScraperInput` in `config.ts`.
+Actor input is built in `src/services/get-reddit-thread-data/config.ts`. To change comment limits or timeouts, edit `buildApifyRedditScraperInput`.
 
 ## Project structure
 
-```
+```text
 reddit-scraper-express-server/
 ├── index.ts
 ├── src/services/
-│   ├── get-reddit-thread-data/   # Apify proxy (handler, process, config)
+│   ├── api-docs/
+│   ├── get-reddit-thread-data/
 │   ├── health/
 │   ├── middleware/
 │   └── server/
-├── .env.example
-└── package.json
+├── docs/
+└── .cursor/architecture/
 ```
 
 ## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Dev server with hot reload (port 3037) |
+| `npm run dev` | Dev server with hot reload |
 | `npm start` | Run with ts-node |
 | `npm run build` | Compile TypeScript to `dist/` |
+| `npm run typecheck` | TypeScript check without emit |
+
+`package-lock.json` is committed — use `npm ci` in CI and production.
 
 ## Deployment
 
@@ -170,17 +128,28 @@ npm run build
 NODE_ENV=production node dist/index.js
 ```
 
-Set `APIFY_API_TOKEN` and `SCRAPER_API_KEY` in the host environment (Railway, etc.). Point callers at the deployed URL with `REDDIT_SCRAPER_EXPRESS_URL` and the same `SCRAPER_API_KEY`.
+Set `APIFY_API_TOKEN` and `SCRAPER_API_KEY` in the host environment.
 
-## Architecture & agent rules
+## Example integration
 
-Cursor agents should follow **`.cursor/rules/AGENTS.md`** and ADRs in **`.cursor/architecture/`**.
+See [`docs/integration.md`](docs/integration.md) for env names (`REDDIT_SCRAPER_EXPRESS_URL`, `SCRAPER_API_KEY`) used by product backends.
 
-- HTTP + business logic: `src/services/{feature}/` (routers, handlers, `processX()`)
-- Cross-cutting: `src/services/middleware`, `health`, `server`
-- Factory pattern: `createXRouter(): Router`
-- Use `type`, not `interface`
+## Roadmap
+
+- **MCP tool** wrapping the same HTTP contract — see [`docs/mcp.md`](docs/mcp.md)
+
+## OSS governance
+
+This repo follows the TroutHouseTech open-source governance pack:
+
+[mentorai-server `data/open-source/`](https://github.com/trouthouse-tech/mentorai-server/tree/main/data/open-source)
+
+Release status: [`docs/oss-release-status.md`](docs/oss-release-status.md)
+
+## Architecture
+
+Follow **`.cursor/rules/AGENTS.md`** and **`.cursor/architecture/`** (including [012 – API docs](./.cursor/architecture/012-api-docs-catalog.md)).
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).

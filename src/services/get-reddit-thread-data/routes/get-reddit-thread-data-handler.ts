@@ -51,7 +51,7 @@ export const getRedditThreadDataHandler = async (
 
   if (!isRedditUrl(url)) {
     console.error(`❌ ${LOG} invalid url`);
-    res.status(400).json({ success: false, error: 'url must be a Reddit thread URL' });
+    res.status(400).json({ success: false, error: 'url must be a reddit.com URL' });
     return;
   }
 

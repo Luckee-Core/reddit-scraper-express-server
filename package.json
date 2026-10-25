@@ -1,16 +1,33 @@
 {
-  "name": "express-server-template",
-  "version": "1.0.0",
-  "description": "Express API Server Template - Ready-to-use Express server with TypeScript",
+  "name": "reddit-scraper-express-server",
+  "version": "0.1.0",
+  "description": "Open-source Express API — Apify proxy for Reddit thread and listing scrapes",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Luckee-Core/reddit-scraper-express-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Luckee-Core/reddit-scraper-express-server/issues"
+  },
+  "homepage": "https://github.com/Luckee-Core/reddit-scraper-express-server#readme",
   "main": "index.ts",
+  "keywords": [
+    "express",
+    "reddit",
+    "apify",
+    "scraper",
+    "typescript",
+    "api"
+  ],
   "scripts": {
     "start": "ts-node index.ts",
     "dev": "nodemon --exec ts-node index.ts",
     "build": "tsc",
-    "build:watch": "tsc --watch"
+    "build:watch": "tsc --watch",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vercel/analytics": "^2.0.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"

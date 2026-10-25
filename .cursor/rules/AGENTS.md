@@ -58,3 +58,6 @@ Use emoji prefixes: `🚀` `✅` `❌` `📥` `📤` `🤖` `💾`
 - [005 – Edge functions Railway-only](./architecture/005-edge-functions-railway-only.md)
 - [006 – Logging & error response standards](./architecture/006-logging-and-error-response-standards.md)
 - [007 – Starter template layout](./architecture/007-starter-template-layout.md)
+- [012 – API docs catalog](./architecture/012-api-docs-catalog.md) — update `api-docs-catalog.ts` when routes change
+
+**This slice:** stateless Apify proxy — no Supabase/Anthropic managed clients in runtime code; ADR 004 applies when those services are added.

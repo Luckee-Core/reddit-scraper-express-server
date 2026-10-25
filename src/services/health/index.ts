@@ -1,6 +1,2 @@
-/**
- * Health Service Module
- * Exports health check related functionality
- */
-
-export { createHealthRouter } from './create-health-router';
+export { createHealthRouter } from './router';
+export { processHealthCheck } from './process-health-check';
