@@ -1,7 +1,8 @@
 import express from 'express';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Hub / luckee-hub-express often export PORT=3001; .env must win (see hub spawn-project-pty).
+dotenv.config({ override: true });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3037;
