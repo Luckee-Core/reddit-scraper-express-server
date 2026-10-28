@@ -8,6 +8,7 @@ import { Express, Request, Response, NextFunction } from 'express';
 export const setupErrorHandling = (app: Express): void => {
   // 404 handler - must be after all routes
   app.use((req: Request, res: Response) => {
+    console.warn(`❌ 404 ${req.method} ${req.originalUrl || req.path}`);
     res.status(404).json({
       success: false,
       error: 'Not Found',
